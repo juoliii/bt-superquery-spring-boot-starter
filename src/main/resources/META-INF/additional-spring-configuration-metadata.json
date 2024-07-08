@@ -1,0 +1,17 @@
+{
+  "groups": [],
+  "properties": [
+    {
+      "name": "bt.superquery.enable",
+      "type": "java.lang.Boolean",
+      "description":"open the interceptor.",
+      "defaultValue": false
+    },
+    {
+      "name": "bt.superquery.autoAttach",
+      "type": "java.lang.Boolean",
+      "description":"enable auto attach.",
+      "defaultValue": false
+    }
+  ]
+}
