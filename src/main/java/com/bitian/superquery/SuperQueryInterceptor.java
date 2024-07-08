@@ -46,7 +46,7 @@ public class SuperQueryInterceptor implements Interceptor {
         RowBounds rowBounds = (RowBounds) args[2];
         Executor executor = (Executor) invocation.getTarget();
         CacheKey cacheKey;
-        BoundSql boundSql;
+        BoundSql boundSql=null;
         BaseForm form=null;
         if( param instanceof BaseForm){
             form= (BaseForm) param;
@@ -59,13 +59,21 @@ public class SuperQueryInterceptor implements Interceptor {
             }
         }
         if(args.length == 3){
+            if(form!=null && myProperties.getAutoAttach()==false){
+                this.handleSql(boundSql,form,ms.getConfiguration());
+            }
             return invocation.proceed();
         } else if(args.length==4){
             //4 个参数时
             ResultHandler resultHandler = (ResultHandler) args[3];
-            boundSql = ms.getBoundSql(param);
-            if(form!=null)
+
+            if(form!=null && myProperties.getAutoAttach()){
+                boundSql = ms.getBoundSql(param);
                 this.handleSql(boundSql,form,ms.getConfiguration());
+            }else if(form!=null && myProperties.getAutoAttach()==false){
+                this.handleSql(null,form,ms.getConfiguration());
+                boundSql = ms.getBoundSql(param);
+            }
             cacheKey = executor.createCacheKey(ms, param, rowBounds, boundSql);
             return executor.query(ms, param, rowBounds, resultHandler, cacheKey, boundSql);
         } else {
@@ -73,8 +81,9 @@ public class SuperQueryInterceptor implements Interceptor {
             ResultHandler resultHandler = (ResultHandler) args[3];
             cacheKey = (CacheKey) args[4];
             boundSql = (BoundSql) args[5];
-            if(form!=null)
+            if(form!=null && myProperties.getAutoAttach()){
                 this.handleSql(boundSql,form,ms.getConfiguration());
+            }
             return executor.query(ms, param, rowBounds, resultHandler, cacheKey, boundSql);
         }
 
