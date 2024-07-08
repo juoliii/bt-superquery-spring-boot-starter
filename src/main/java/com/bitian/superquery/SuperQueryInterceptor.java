@@ -58,6 +58,9 @@ public class SuperQueryInterceptor implements Interceptor {
                 }
             }
         }
+        if(form==null){
+            return invocation.proceed();
+        }
         if(args.length == 3){
             if(form!=null && myProperties.getAutoAttach()==false){
                 this.handleSql(boundSql,form,ms.getConfiguration());
@@ -66,11 +69,10 @@ public class SuperQueryInterceptor implements Interceptor {
         } else if(args.length==4){
             //4 个参数时
             ResultHandler resultHandler = (ResultHandler) args[3];
-
-            if(form!=null && myProperties.getAutoAttach()){
+            if(myProperties.getAutoAttach()){
                 boundSql = ms.getBoundSql(param);
                 this.handleSql(boundSql,form,ms.getConfiguration());
-            }else if(form!=null && myProperties.getAutoAttach()==false){
+            }else{
                 this.handleSql(null,form,ms.getConfiguration());
                 boundSql = ms.getBoundSql(param);
             }
@@ -81,7 +83,7 @@ public class SuperQueryInterceptor implements Interceptor {
             ResultHandler resultHandler = (ResultHandler) args[3];
             cacheKey = (CacheKey) args[4];
             boundSql = (BoundSql) args[5];
-            if(form!=null && myProperties.getAutoAttach()){
+            if(myProperties.getAutoAttach()){
                 this.handleSql(boundSql,form,ms.getConfiguration());
             }
             return executor.query(ms, param, rowBounds, resultHandler, cacheKey, boundSql);
