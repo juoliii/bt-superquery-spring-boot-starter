@@ -3,13 +3,21 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.github.juoliii</groupId>
     <artifactId>bt-superquery-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
     <name>Archetype - bt-superquery-spring-boot-starter</name>
     <description>bt-superquery-spring-boot-starter</description>
-    <url>https://github.com/juoliii</url>
+    <url>https://github.com/juoliii/bt-superquery-spring-boot-starter.git</url>
 
     <dependencies>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.26</version>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
@@ -44,13 +52,13 @@
         <dependency>
             <groupId>io.github.juoliii</groupId>
             <artifactId>common</artifactId>
-            <version>0.2.1</version>
+            <version>0.2.4</version>
         </dependency>
 
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.26</version>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>2.0.52</version>
         </dependency>
 
     </dependencies>
