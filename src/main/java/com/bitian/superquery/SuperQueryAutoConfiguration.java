@@ -36,17 +36,18 @@ public class SuperQueryAutoConfiguration implements InitializingBean {
             return;
         ThreadUtil.executeThread(()->{
             try {
-                Thread.sleep(3000);
+                //延迟加载，先让pagehelper插件加载，后加载的先执行
+                Thread.sleep(5000);
+                SuperQueryInterceptor interceptor=new SuperQueryInterceptor(myProperties);
+                for (SqlSessionFactory sqlSessionFactory : sqlSessionFactoryList) {
+                    org.apache.ibatis.session.Configuration configuration = sqlSessionFactory.getConfiguration();
+                    List<Interceptor> exists=findExists(configuration,interceptor);
+                    if(exists.size()>0)
+                        configuration.getInterceptors().removeAll(exists);
+                    configuration.addInterceptor(interceptor);
+                }
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
-            }
-            SuperQueryInterceptor interceptor=new SuperQueryInterceptor(myProperties);
-            for (SqlSessionFactory sqlSessionFactory : sqlSessionFactoryList) {
-                org.apache.ibatis.session.Configuration configuration = sqlSessionFactory.getConfiguration();
-                List<Interceptor> exists=findExists(configuration,interceptor);
-                if(exists.size()>0)
-                    configuration.getInterceptors().removeAll(exists);
-                configuration.addInterceptor(interceptor);
             }
         });
     }

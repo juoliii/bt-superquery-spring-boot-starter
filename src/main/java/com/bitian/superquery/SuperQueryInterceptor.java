@@ -63,6 +63,7 @@ public class SuperQueryInterceptor implements Interceptor {
         }
         if(args.length == 3){
             if(form!=null && myProperties.getAutoAttach()==false){
+                boundSql = ms.getBoundSql(param);
                 this.handleSql(boundSql,form,ms.getConfiguration());
             }
             return invocation.proceed();
