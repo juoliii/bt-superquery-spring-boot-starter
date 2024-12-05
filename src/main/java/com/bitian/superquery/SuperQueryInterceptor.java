@@ -4,7 +4,12 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONValidator;
 import com.bitian.common.dto.BaseForm;
 import com.bitian.common.dto.QueryGroup;
+import com.bitian.common.dto.QueryJoin;
+import com.bitian.common.dto.SubQuery;
+import com.bitian.common.enums.QueryConditionType;
 import com.bitian.common.enums.SuperQueryCondition;
+import com.bitian.common.enums.SuperQueryType;
+import com.bitian.common.exception.CustomException;
 import com.bitian.common.util.PrimaryKeyUtil;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.select.PlainSelect;
@@ -33,6 +38,11 @@ import java.util.*;
 public class SuperQueryInterceptor implements Interceptor {
 
     private MyProperties myProperties;
+
+    public SuperQueryInterceptor(){
+        this.myProperties=new MyProperties();
+        this.myProperties.setEnable(true);
+    }
 
     public SuperQueryInterceptor(MyProperties myProperties){
         this.myProperties=myProperties;
@@ -63,20 +73,14 @@ public class SuperQueryInterceptor implements Interceptor {
         }
         if(args.length == 3){
             if(form!=null && myProperties.getAutoAttach()==false){
-                boundSql = ms.getBoundSql(param);
-                this.handleSql(boundSql,form,ms.getConfiguration());
+                this.handleSql(form);
             }
             return invocation.proceed();
         } else if(args.length==4){
             //4 个参数时
             ResultHandler resultHandler = (ResultHandler) args[3];
-            if(myProperties.getAutoAttach()){
-                boundSql = ms.getBoundSql(param);
-                this.handleSql(boundSql,form,ms.getConfiguration());
-            }else{
-                this.handleSql(null,form,ms.getConfiguration());
-                boundSql = ms.getBoundSql(param);
-            }
+            this.handleSql(form);
+            boundSql = ms.getBoundSql(param);
             cacheKey = executor.createCacheKey(ms, param, rowBounds, boundSql);
             return executor.query(ms, param, rowBounds, resultHandler, cacheKey, boundSql);
         } else {
@@ -84,17 +88,10 @@ public class SuperQueryInterceptor implements Interceptor {
             ResultHandler resultHandler = (ResultHandler) args[3];
             cacheKey = (CacheKey) args[4];
             boundSql = (BoundSql) args[5];
-            if(myProperties.getAutoAttach()){
-                this.handleSql(boundSql,form,ms.getConfiguration());
-            }
+            this.handleSql(form);
             return executor.query(ms, param, rowBounds, resultHandler, cacheKey, boundSql);
         }
 
-    }
-
-    private boolean hasWhere(String sql) throws Exception {
-        PlainSelect select= (PlainSelect)CCJSqlParserUtil.parse(sql);
-        return select.getWhere()!=null;
     }
 
     @Override
@@ -107,31 +104,44 @@ public class SuperQueryInterceptor implements Interceptor {
         Interceptor.super.setProperties(properties);
     }
 
-    private void handleSql(BoundSql boundSql, BaseForm form, Configuration configuration) throws Exception {
-        if(form.get_groups().size()==0)
-            return;
+    private void handleSql(BaseForm form) throws Exception {
         Map<String,Object> map=new HashMap<>();
-        List<QueryGroup> groups=form.get_groups();
-        List<ParameterMapping> parameterMappings=new ArrayList<>();
-        boolean hasWhere=false;
-        if(myProperties.getAutoAttach()){
-            hasWhere=this.hasWhere(boundSql.getSql());
-            groups.get(0).setCondition(hasWhere?SuperQueryCondition.and:null);
-            parameterMappings.addAll(boundSql.getParameterMappings());
+        String sql=this.parseCondition(form.get_groups(),map);
+        form.set_sql(sql);
+        form.set_sql_data(map);
+    }
+
+    private String parseQuery(SubQuery subQuery,Map<String,Object> map) throws Exception {
+        String sql="select "+StringUtils.join(subQuery.getColumns(),",")+" from "+subQuery.getName()+" ";
+        if(subQuery.getJoins()!=null && subQuery.getJoins().size()>0){
+            for (QueryJoin join : subQuery.getJoins()) {
+                sql+=" left join "+join.getName()+" on "+this.parseCondition(join.getConditions(),map);
+            }
         }
+        sql+=" where "+this.parseCondition(subQuery.getConditions(),map);
+        return sql;
+    }
+
+    private String parseCondition(List<QueryGroup> conditions,Map<String,Object> map) throws Exception {
+        if(conditions.size()==0)
+            return "";
         StringBuffer sb=new StringBuffer();
-        for (QueryGroup group : groups) {
+        for (int i = 0; i < conditions.size(); i++) {
+            QueryGroup group=conditions.get(i);
             StringBuffer dt=new StringBuffer();
-            for (QueryGroup.QueryDetail detail : group.getDetails()) {
+            for (int j = 0; j < group.getDetails().size(); j++) {
+                QueryGroup.QueryDetail detail=group.getDetails().get(j);
                 if(detail.getValue()==null||detail.getValue().toString().length()==0){
                     continue;
                 }
-                dt.append(" "+(detail.getCondition()==null?"":detail.getCondition().toString())+" ");
+                dt.append(" "+(j==0?"":detail.getCondition().toString())+" ");
                 if(StringUtils.isNotBlank(detail.getAlias())){
                     dt.append(" "+detail.getAlias()+".");
                 }
                 if(detail.getDynamic()){
                     dt.append("data->>'$."+detail.getKey()+"' ");
+                }else if(detail.getType()== SuperQueryType.exists){
+                    dt.append(" ");
                 }else{
                     dt.append(detail.getKey()+" ");
                 }
@@ -141,151 +151,105 @@ public class SuperQueryInterceptor implements Interceptor {
                 switch (detail.getType()){
                     case eq:{
                         //等于
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" = ?");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,detail.getValue());
-                        }else{
+                        if(detail.getConditionType()== QueryConditionType.specificValue){
                             dt.append(" = #{_sql_data."+key +"}");
                             map.put(key,detail.getValue());
-                        }
-
-                        break;
-                    }
-                    case in:{
-                        //多值等于
-                        List<?> strs=null;
-                        if(detail.getValue() instanceof List){
-                            strs= (List<?>) detail.getValue();
-                        }else if(detail.getValue() instanceof String){
-                            String value=detail.getValue().toString();
-                            if(StringUtils.isNotBlank(value)){
-                                if(JSONValidator.from(value).validate()){
-                                    strs= JSONArray.parseArray(value);
-                                }else{
-                                    strs=Arrays.asList(StringUtils.split(value,"\n"));
-                                }
-                            }
-                        }
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" in (");
-                            for (int i = 0; i < strs.size(); i++) {
-                                dt.append(" ? ");
-                                if(i!=strs.size()-1){
-                                    dt.append(",");
-                                }
-                                parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                                boundSql.setAdditionalParameter(key,strs.get(i));
-                            }
-                            dt.append(")");
-                        }else{
-                            dt.append(" in (");
-                            for (int i = 0; i < strs.size(); i++) {
-                                dt.append("#{_sql_data."+key+i+"}");
-                                if(i!=strs.size()-1){
-                                    dt.append(",");
-                                }
-                                map.put(key+i,strs.get(i));
-                            }
-                            dt.append(")");
+                        }else if(detail.getConditionType()== QueryConditionType.column){
+                            dt.append(" = "+detail.getValue());
+                        }else if(detail.getConditionType()== QueryConditionType.subQuery){
+                            dt.append(" = "+this.parseQuery((SubQuery) detail.getValue(),map));
                         }
                         break;
                     }
                     case ne:{
                         //不等于
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" != ? ");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,detail.getValue());
-                        }else{
+                        if(detail.getConditionType()== QueryConditionType.specificValue){
                             dt.append(" != #{_sql_data."+key +"}");
                             map.put(key,detail.getValue());
+                        }else if(detail.getConditionType()== QueryConditionType.column){
+                            dt.append(" != "+detail.getValue());
+                        }else if(detail.getConditionType()== QueryConditionType.subQuery){
+                            dt.append(" != "+this.parseQuery((SubQuery) detail.getValue(),map));
+                        }
+                        break;
+                    }
+                    case in:{
+                        //多值等于
+                        if(detail.getConditionType()== QueryConditionType.specificValue){
+                            List<?> strs=null;
+                            if(detail.getValue() instanceof List){
+                                strs= (List<?>) detail.getValue();
+                            }else if(detail.getValue() instanceof String){
+                                String value=detail.getValue().toString();
+                                if(StringUtils.isNotBlank(value)){
+                                    if(JSONValidator.from(value).validate()){
+                                        strs= JSONArray.parseArray(value);
+                                    }else{
+                                        strs=Arrays.asList(StringUtils.split(value,"\n"));
+                                    }
+                                }
+                            }
+                            dt.append(" in (");
+                            for (int k = 0; k < strs.size(); k++) {
+                                dt.append("#{_sql_data."+key+k+"}");
+                                if(i!=strs.size()-1){
+                                    dt.append(",");
+                                }
+                                map.put(key+k,strs.get(k));
+                            }
+                            dt.append(")");
+                        }else if(detail.getConditionType()== QueryConditionType.subQuery){
+                            dt.append(" in ("+this.parseQuery((SubQuery) detail.getValue(),map)+")");
                         }
                         break;
                     }
                     case like:{
                         // like
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" like ? ");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,"%"+detail.getValue()+"%");
-                        }else{
-                            dt.append(" like #{_sql_data."+key +"}");
-                            map.put(key,"%"+detail.getValue()+"%");
-                        }
+                        dt.append(" like #{_sql_data."+key +"}");
+                        map.put(key,"%"+detail.getValue()+"%");
                         break;
                     }
                     case lt:{
                         //小于
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" < ? ");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,detail.getValue());
-                        }else{
-                            dt.append(" < #{_sql_data."+key +"}");
-                            map.put(key,detail.getValue());
-                        }
+                        dt.append(" < #{_sql_data."+key +"}");
+                        map.put(key,detail.getValue());
                         break;
                     }
                     case gt:{
                         //大于
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" > ? ");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,detail.getValue());
-                        }else{
-                            dt.append(" > #{_sql_data."+key +"}");
-                            map.put(key,detail.getValue());
-                        }
+                        dt.append(" > #{_sql_data."+key +"}");
+                        map.put(key,detail.getValue());
                         break;
                     }
                     case lte:{
                         //小于等于
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" <= ? ");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,detail.getValue());
-                        }else{
-                            dt.append(" <= #{_sql_data."+key +"}");
-                            map.put(key,detail.getValue());
-                        }
+                        dt.append(" <= #{_sql_data."+key +"}");
+                        map.put(key,detail.getValue());
                         break;
                     }
                     case gte:{
                         //大于等于
-                        if(myProperties.getAutoAttach()){
-                            dt.append(" >= ? ");
-                            parameterMappings.add(new ParameterMapping.Builder(configuration,key,Object.class).build());
-                            boundSql.setAdditionalParameter(key,detail.getValue());
+                        dt.append(" >= #{_sql_data."+key +"}");
+                        map.put(key,detail.getValue());
+                        break;
+                    }
+                    case exists:{
+                        if(detail.getConditionType()== QueryConditionType.subQuery){
+                            dt.append(" exists ("+this.parseQuery((SubQuery) detail.getValue(),map)+")");
                         }else{
-                            dt.append(" >= #{_sql_data."+key +"}");
-                            map.put(key,detail.getValue());
+                            throw new CustomException("参数异常");
                         }
                         break;
                     }
-
                 }
             }
             if(dt.length()>0){
-                sb.append(" "+(group.getCondition()==null?"":group.getCondition().toString())+" (");
+                sb.append(" "+(i==0?"":group.getCondition().toString())+" (");
                 sb.append(dt);
                 sb.append(" ) ");
             }
-
         }
-        if(myProperties.getAutoAttach()){
-            String modifiedSql = boundSql.getSql() + (hasWhere?sb.toString():(" where "+sb.toString()));
-            Field sqlField = BoundSql.class.getDeclaredField("sql");
-            sqlField.setAccessible(true);
-            sqlField.set(boundSql, modifiedSql);
-            Field parameterMappingsField=BoundSql.class.getDeclaredField("parameterMappings");
-            parameterMappingsField.setAccessible(true);
-            parameterMappingsField.set(boundSql,parameterMappings);
-        }else{
-            form.set_sql(sb.toString());
-            form.set_sql_data(map);
-        }
-
+        return sb.toString();
     }
 
 }
