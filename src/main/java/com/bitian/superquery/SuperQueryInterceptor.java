@@ -1,6 +1,7 @@
 package com.bitian.superquery;
 
 import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.JSONValidator;
 import com.bitian.common.dto.BaseForm;
 import com.bitian.common.dto.QueryGroup;
@@ -235,7 +236,11 @@ public class SuperQueryInterceptor implements Interceptor {
                     }
                     case exists:{
                         if(detail.getConditionType()== QueryConditionType.subQuery){
-                            dt.append(" exists ("+this.parseQuery((SubQuery) detail.getValue(),map)+")");
+                            if(detail.getValue()!=null){
+                                JSONObject json=new JSONObject((Map<String, Object>) detail.getValue());
+                                SubQuery subQuery=json.toJavaObject(SubQuery.class);
+                                dt.append(" exists ("+this.parseQuery(subQuery,map)+")");
+                            }
                         }else{
                             throw new CustomException("参数异常");
                         }
