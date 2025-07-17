@@ -193,7 +193,7 @@ public class SuperQueryInterceptor implements Interceptor {
                             dt.append(" in (");
                             for (int k = 0; k < strs.size(); k++) {
                                 dt.append("#{_sql_data."+key+k+"}");
-                                if(i!=strs.size()-1){
+                                if(k!=strs.size()-1){
                                     dt.append(",");
                                 }
                                 map.put(key+k,strs.get(k));
