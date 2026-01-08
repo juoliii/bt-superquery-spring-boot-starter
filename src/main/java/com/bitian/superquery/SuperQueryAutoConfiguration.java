@@ -1,6 +1,5 @@
 package com.bitian.superquery;
 
-import com.bitian.common.util.ThreadUtil;
 import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -19,7 +18,7 @@ import java.util.stream.Collectors;
 @Configuration
 @EnableConfigurationProperties({MyProperties.class})
 @ConditionalOnBean(SqlSessionFactory.class)
-@AutoConfigureAfter(org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration.class)
+@AutoConfigureAfter(name={"org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration.class","com.github.pagehelper.autoconfigure.PageHelperAutoConfiguration"})
 public class SuperQueryAutoConfiguration implements InitializingBean {
 
     @Resource
@@ -34,22 +33,14 @@ public class SuperQueryAutoConfiguration implements InitializingBean {
     public void afterPropertiesSet() throws Exception {
         if(myProperties.getEnable()==false)
             return;
-        ThreadUtil.executeThread(()->{
-            try {
-                //延迟加载，先让pagehelper插件加载，后加载的先执行
-                Thread.sleep(5000);
-                SuperQueryInterceptor interceptor=new SuperQueryInterceptor(myProperties);
-                for (SqlSessionFactory sqlSessionFactory : sqlSessionFactoryList) {
-                    org.apache.ibatis.session.Configuration configuration = sqlSessionFactory.getConfiguration();
-                    List<Interceptor> exists=findExists(configuration,interceptor);
-                    if(exists.size()>0)
-                        configuration.getInterceptors().removeAll(exists);
-                    configuration.addInterceptor(interceptor);
-                }
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        });
+        SuperQueryInterceptor interceptor=new SuperQueryInterceptor(myProperties);
+        for (SqlSessionFactory sqlSessionFactory : sqlSessionFactoryList) {
+            org.apache.ibatis.session.Configuration configuration = sqlSessionFactory.getConfiguration();
+            List<Interceptor> exists=findExists(configuration,interceptor);
+            if(!exists.isEmpty())
+                configuration.getInterceptors().removeAll(exists);
+            configuration.addInterceptor(interceptor);
+        }
     }
 
     private List<Interceptor> findExists(org.apache.ibatis.session.Configuration configuration, Interceptor interceptor) {

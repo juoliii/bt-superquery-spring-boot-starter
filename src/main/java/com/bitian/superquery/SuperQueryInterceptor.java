@@ -124,27 +124,28 @@ public class SuperQueryInterceptor implements Interceptor {
     }
 
     private String parseCondition(List<QueryGroup> conditions,Map<String,Object> map) throws Exception {
-        if(conditions.size()==0)
+        if(conditions.isEmpty())
             return "";
-        StringBuffer sb=new StringBuffer();
+        StringBuilder sb=new StringBuilder();
         for (int i = 0; i < conditions.size(); i++) {
             QueryGroup group=conditions.get(i);
-            StringBuffer dt=new StringBuffer();
+            StringBuilder dt=new StringBuilder();
             for (int j = 0; j < group.getDetails().size(); j++) {
                 QueryGroup.QueryDetail detail=group.getDetails().get(j);
                 if(detail.getValue()==null||detail.getValue().toString().length()==0){
                     continue;
                 }
-                dt.append(" "+(j==0?"":detail.getCondition().toString())+" ");
+                dt.append(" ").append(j == 0 ? "" : detail.getCondition().toString()).append(" ");
                 if(StringUtils.isNotBlank(detail.getAlias())){
-                    dt.append(" "+detail.getAlias()+".");
+                    dt.append(" ").append(detail.getAlias()).append(".");
                 }
                 if(detail.getDynamic()){
-                    dt.append("data->>'$."+detail.getKey()+"' ");
+                    dt.append("data->>'$.").append(detail.getKey()).append("' ");
                 }else if(detail.getType()== SuperQueryType.exists){
                     dt.append(" ");
                 }else{
-                    dt.append(detail.getKey()+" ");
+                    String filedName=(myProperties.getMapCamelCaseToUnderscore()&&!detail.getDynamic())?QueryUtil.camelToSnake(detail.getKey()):detail.getKey();
+                    dt.append(filedName).append(" ");
                 }
 
                 String key=detail.getKey()+"_"+ PrimaryKeyUtil.getUUID();
@@ -153,24 +154,24 @@ public class SuperQueryInterceptor implements Interceptor {
                     case eq:{
                         //等于
                         if(detail.getConditionType()== QueryConditionType.specificValue){
-                            dt.append(" = #{_sql_data."+key +"}");
+                            dt.append(" = #{_sql_data.").append(key).append("}");
                             map.put(key,detail.getValue());
                         }else if(detail.getConditionType()== QueryConditionType.column){
-                            dt.append(" = "+detail.getValue());
+                            dt.append(" = ").append(detail.getValue());
                         }else if(detail.getConditionType()== QueryConditionType.subQuery){
-                            dt.append(" = "+this.parseQuery((SubQuery) detail.getValue(),map));
+                            dt.append(" = ").append(this.parseQuery((SubQuery) detail.getValue(), map));
                         }
                         break;
                     }
                     case ne:{
                         //不等于
                         if(detail.getConditionType()== QueryConditionType.specificValue){
-                            dt.append(" != #{_sql_data."+key +"}");
+                            dt.append(" != #{_sql_data.").append(key).append("}");
                             map.put(key,detail.getValue());
                         }else if(detail.getConditionType()== QueryConditionType.column){
-                            dt.append(" != "+detail.getValue());
+                            dt.append(" != ").append(detail.getValue());
                         }else if(detail.getConditionType()== QueryConditionType.subQuery){
-                            dt.append(" != "+this.parseQuery((SubQuery) detail.getValue(),map));
+                            dt.append(" != ").append(this.parseQuery((SubQuery) detail.getValue(), map));
                         }
                         break;
                     }
@@ -192,7 +193,7 @@ public class SuperQueryInterceptor implements Interceptor {
                             }
                             dt.append(" in (");
                             for (int k = 0; k < strs.size(); k++) {
-                                dt.append("#{_sql_data."+key+k+"}");
+                                dt.append("#{_sql_data.").append(key).append(k).append("}");
                                 if(k!=strs.size()-1){
                                     dt.append(",");
                                 }
@@ -200,37 +201,37 @@ public class SuperQueryInterceptor implements Interceptor {
                             }
                             dt.append(")");
                         }else if(detail.getConditionType()== QueryConditionType.subQuery){
-                            dt.append(" in ("+this.parseQuery((SubQuery) detail.getValue(),map)+")");
+                            dt.append(" in (").append(this.parseQuery((SubQuery) detail.getValue(), map)).append(")");
                         }
                         break;
                     }
                     case like:{
                         // like
-                        dt.append(" like #{_sql_data."+key +"}");
+                        dt.append(" like #{_sql_data.").append(key).append("}");
                         map.put(key,"%"+detail.getValue()+"%");
                         break;
                     }
                     case lt:{
                         //小于
-                        dt.append(" < #{_sql_data."+key +"}");
+                        dt.append(" < #{_sql_data.").append(key).append("}");
                         map.put(key,detail.getValue());
                         break;
                     }
                     case gt:{
                         //大于
-                        dt.append(" > #{_sql_data."+key +"}");
+                        dt.append(" > #{_sql_data.").append(key).append("}");
                         map.put(key,detail.getValue());
                         break;
                     }
                     case lte:{
                         //小于等于
-                        dt.append(" <= #{_sql_data."+key +"}");
+                        dt.append(" <= #{_sql_data.").append(key).append("}");
                         map.put(key,detail.getValue());
                         break;
                     }
                     case gte:{
                         //大于等于
-                        dt.append(" >= #{_sql_data."+key +"}");
+                        dt.append(" >= #{_sql_data.").append(key).append("}");
                         map.put(key,detail.getValue());
                         break;
                     }
@@ -239,7 +240,7 @@ public class SuperQueryInterceptor implements Interceptor {
                             if(detail.getValue()!=null){
                                 JSONObject json=new JSONObject((Map<String, Object>) detail.getValue());
                                 SubQuery subQuery=json.toJavaObject(SubQuery.class);
-                                dt.append(" exists ("+this.parseQuery(subQuery,map)+")");
+                                dt.append(" exists (").append(this.parseQuery(subQuery, map)).append(")");
                             }
                         }else{
                             throw new CustomException("参数异常");
@@ -249,7 +250,7 @@ public class SuperQueryInterceptor implements Interceptor {
                 }
             }
             if(dt.length()>0){
-                sb.append(" "+(i==0?"":group.getCondition().toString())+" (");
+                sb.append(" ").append(i == 0 ? "" : group.getCondition().toString()).append(" (");
                 sb.append(dt);
                 sb.append(" ) ");
             }

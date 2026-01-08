@@ -14,4 +14,6 @@ public class MyProperties {
 
     private Boolean autoAttach=false;
 
+    private Boolean mapCamelCaseToUnderscore=false;
+
 }

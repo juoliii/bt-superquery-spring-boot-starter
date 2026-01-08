@@ -12,6 +12,12 @@
       "type": "java.lang.Boolean",
       "description":"enable auto attach.",
       "defaultValue": false
+    },
+    {
+      "name": "bt.superquery.mapCamelCaseToUnderscore",
+      "type": "java.lang.Boolean",
+      "description":"enable mapCamelCaseToUnderscore.",
+      "defaultValue": false
     }
   ]
 }
